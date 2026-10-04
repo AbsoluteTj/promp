@@ -1,0 +1,750 @@
+openapi: 3.0.3
+info:
+  title: CassavaCare AI Backend REST API
+  description: |
+    Spesifikasi REST API backend resmi untuk **CassavaCare AI** - platform deteksi dan manajemen penyakit daun singkong berbasis kecerdasan buatan (Computer Vision).
+    
+    ### Fitur Utama:
+    * **Otentikasi & Otorisasi (`/auth`)**: Pendaftaran, login dengan JWT access token & refresh token, serta verifikasi profil pengguna.
+    * **Katalog Penyakit (`/diseases`)**: Informasi rujukan penyakit (`CMD`, `CBSD`, `BLS`, `GMD`, `RMD`, `HEALTHY`), gejala visual, serta panduan penanganan & pencegahan.
+    * **Inferensi AI & Riwayat (`/predictions`)**: Pengunggahan citra daun singkong (`multipart/form-data`) untuk klasifikasi AI on-device/backend dengan penanganan ambang batas keyakinan < 70% (*BR-01, AC-02*).
+  version: 1.0.0
+  contact:
+    name: Tim Pengembang CassavaCare AI
+    email: dev@cassavacare.id
+
+servers:
+  - url: /api/v1
+    description: Server API Lokal / Pengembangan (v1)
+
+tags:
+  - name: Auth
+    description: Manajemen akun pengguna, otentikasi JWT, dan pencabutan sesi token.
+  - name: Diseases
+    description: Katalog rujukan penyakit daun singkong, penanganan, dan tindakan pencegahan.
+  - name: Predictions
+    description: Diagnosa penyakit berbasis AI [★ AI], riwayat diagnosa, dan penanganan fallback.
+
+security: []
+
+paths:
+  /auth/signup:
+    post:
+      tags:
+        - Auth
+      summary: Registrasi Akun Pengguna Baru
+      description: Membuat akun baru untuk pengguna (Petani / Pakar / Admin) dan mengembalikan informasi profil awal.
+      operationId: signUpUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserSignUpRequest'
+      responses:
+        '201':
+          description: Akun pengguna berhasil dibuat.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Input tidak valid atau email sudah terdaftar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Kesalahan validasi format input (Unprocessable Entity).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Otentikasi & Login Pengguna
+      description: Otentikasi kredensial email & password, mengembalikan Access Token JWT dan Refresh Token.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLoginRequest'
+      responses:
+        '200':
+          description: Otentikasi berhasil, token diterbitkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Kredensial email atau password salah.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Penyegaran Token Akses (Refresh JWT Token)
+      description: Memperbarui Access Token JWT menggunakan Refresh Token yang masih berlaku.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+                  description: Token refresh JWT valid
+                  example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh_token_payload
+      responses:
+        '200':
+          description: Access Token berhasil diperbarui.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Refresh token tidak valid, kadaluwarsa, atau telah dicabut.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: Ambil Profil Pengguna Aktif
+      description: Mengambil data profil detail dari pengguna yang sedang terautentikasi berdasarkan Bearer JWT Token.
+      operationId: getProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Profil pengguna berhasil diambil.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - message
+                  - data
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: Profil pengguna berhasil diambil
+                  data:
+                    $ref: '#/components/schemas/UserResponseData'
+        '401':
+          description: Token akses tidak ditemukan atau tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /diseases:
+    get:
+      tags:
+        - Diseases
+      summary: Daftar Katalog Penyakit
+      description: Mengambil seluruh daftar rujukan penyakit daun singkong beserta deskripsi dan penanganannya.
+      operationId: listDiseases
+      responses:
+        '200':
+          description: Daftar penyakit berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListDiseaseResponse'
+
+    post:
+      tags:
+        - Diseases
+      summary: Tambah Rujukan Penyakit Baru (Khusus EXPERT / ADMIN)
+      description: Menambahkan rujukan jenis penyakit baru ke dalam katalog sistem.
+      operationId: createDisease
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiseaseCreate'
+      responses:
+        '201':
+          description: Penyakit berhasil ditambahkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleDiseaseResponse'
+        '401':
+          description: Tidak terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Akses ditolak (Hanya untuk role EXPERT atau ADMIN).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /diseases/{disease_id}:
+    get:
+      tags:
+        - Diseases
+      summary: Detail Penyakit Berdasarkan ID
+      description: Mengambil informasi detail lengkap satu rujukan penyakit.
+      operationId: getDiseaseById
+      parameters:
+        - name: disease_id
+          in: path
+          required: true
+          description: UUID unik dari rujukan penyakit
+          schema:
+            type: string
+            format: uuid
+            example: 22222222-2222-2222-2222-222222222222
+      responses:
+        '200':
+          description: Detail penyakit berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleDiseaseResponse'
+        '404':
+          description: Rujukan penyakit tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /predictions:
+    post:
+      tags:
+        - Predictions
+      summary: Diagnosa Penyakit Daun Singkong via Citra [★ AI]
+      description: |
+        Mengunggah berkas citra daun singkong (multipart/form-data) untuk dianalisis oleh model Deep Learning.
+        
+        * Aturan Bisnis (BR-01, AC-02): Jika confidence_score >= 0.70 (70%), status bernilai CONFIDENT dan menyertakan rekomendasi penanganan.
+        * Fallback Warning: Jika confidence_score < 0.70, status bernilai LOW_CONFIDENCE dan menyertakan objek fallback_warning yang berisi pesan perbaikan foto (pencahayaan, fokus, atau sudut pengambilan).
+      operationId: predictDisease
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Berkas gambar daun singkong (Format JPEG/PNG, maks 10MB).
+      responses:
+        '201':
+          description: Analisis AI berhasil dieksekusi dan disimpan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResponse'
+        '400':
+          description: Berkas tidak valid atau bukan berupa gambar daun yang sesuai.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Tidak terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Ukuran berkas melebihi batas maksimum 10MB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Predictions
+      summary: Daftar Riwayat Diagnosa Pengguna
+      description: Mengambil seluruh riwayat diagnosa AI milik pengguna terautentikasi secara terurut dari yang terbaru (paginated).
+      operationId: listUserPredictions
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Nomor halaman data
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+          description: Jumlah entri per halaman
+      responses:
+        '200':
+          description: Riwayat diagnosa berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPredictionResponse'
+        '401':
+          description: Tidak terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /predictions/{prediction_id}:
+    get:
+      tags:
+        - Predictions
+      summary: Detail Riwayat Diagnosa
+      description: Mengambil detail lengkap hasil diagnosa AI berdasarkan UUID riwayat diagnosa.
+      operationId: getPredictionById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: prediction_id
+          in: path
+          required: true
+          description: UUID unik dari entri diagnosa
+          schema:
+            type: string
+            format: uuid
+            example: 33333333-3333-3333-3333-333333333333
+      responses:
+        '200':
+          description: Detail diagnosa berhasil diambil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PredictionResponse'
+        '401':
+          description: Tidak terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Ditolak (Pengguna mencoba mengakses riwayat milik pengguna lain).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Entri diagnosa tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Gunakan token akses JWT yang didapat dari endpoint /auth/login atau /auth/signup. Format header Authorization: Bearer <TOKEN>."
+
+  schemas:
+    UserRole:
+      type: string
+      enum: [FARMER, EXPERT, ADMIN]
+      example: FARMER
+      description: Peran pengguna dalam sistem.
+
+    PredictionStatus:
+      type: string
+      enum: [CONFIDENT, LOW_CONFIDENCE, FAILED]
+      example: CONFIDENT
+      description: Status tingkat kepastian diagnosa AI.
+
+    DiseaseCode:
+      type: string
+      enum: [CMD, CBSD, BLS, GMD, RMD, HEALTHY]
+      example: CMD
+      description: Kode unik kategori penyakit/kondisi tanaman singkong.
+
+    UserSignUpRequest:
+      type: object
+      required:
+        - email
+        - password
+        - full_name
+      properties:
+        email:
+          type: string
+          format: email
+          example: petani@cassavacare.id
+          description: Alamat email aktif pengguna.
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 64
+          example: P@ssw0rd2026!
+          description: Password akun minimal 8 karakter.
+        full_name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Budi Santoso
+          description: Nama lengkap pengguna.
+        role:
+          $ref: '#/components/schemas/UserRole'
+
+    UserLoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: petani@cassavacare.id
+        password:
+          type: string
+          format: password
+          example: P@ssw0rd2026!
+
+    TokenData:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_in
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.access_token_payload
+        refresh_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.refresh_token_payload
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          example: 3600
+          description: Durasi berlaku access token dalam detik (1 jam).
+
+    UserResponseData:
+      type: object
+      required:
+        - id
+        - email
+        - full_name
+        - role
+        - is_active
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        email:
+          type: string
+          example: petani@cassavacare.id
+        full_name:
+          type: string
+          example: Budi Santoso
+        role:
+          $ref: '#/components/schemas/UserRole'
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-10-03T23:00:00Z'
+
+    AuthResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Otentikasi berhasil
+        data:
+          type: object
+          required:
+            - user
+            - tokens
+          properties:
+            user:
+              $ref: '#/components/schemas/UserResponseData'
+            tokens:
+              $ref: '#/components/schemas/TokenData'
+
+    DiseaseBase:
+      type: object
+      required:
+        - code
+        - name
+        - latin_name
+        - description
+        - symptoms
+        - treatment
+        - prevention
+      properties:
+        code:
+          $ref: '#/components/schemas/DiseaseCode'
+        name:
+          type: string
+          example: Cassava Mosaic Disease
+        latin_name:
+          type: string
+          example: Begomovirus
+        description:
+          type: string
+          example: Penyakit mosaik singkong yang disebabkan oleh virus Begomovirus.
+        symptoms:
+          type: string
+          example: Bercak pola mosaik hijau-kuning pada permukaan daun.
+        treatment:
+          type: string
+          example: Cabut dan bakar tanaman yang terinfeksi.
+        prevention:
+          type: string
+          example: Kendalikan populasi lalat putih (Bemisia tabaci).
+
+    DiseaseCreate:
+      $ref: '#/components/schemas/DiseaseBase'
+
+    DiseaseResponse:
+      allOf:
+        - $ref: '#/components/schemas/DiseaseBase'
+        - type: object
+          required:
+            - id
+            - created_at
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: 22222222-2222-2222-2222-222222222222
+            created_at:
+              type: string
+              format: date-time
+              example: '2026-10-03T23:00:00Z'
+
+    SingleDiseaseResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Data penyakit berhasil diambil
+        data:
+          $ref: '#/components/schemas/DiseaseResponse'
+
+    ListDiseaseResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Katalog penyakit berhasil diambil
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiseaseResponse'
+
+    FallbackWarning:
+      type: object
+      required:
+        - warning_code
+        - message
+        - recommendation
+      properties:
+        warning_code:
+          type: string
+          example: LOW_CONFIDENCE_IMAGE
+        message:
+          type: string
+          example: Tingkat kepastian diagnosa AI rendah (62.50% < 70.00%).
+        recommendation:
+          type: string
+          example: Harap ambil ulang foto dengan pencahayaan terang dan fokus tepat.
+
+    PredictionDetailData:
+      type: object
+      required:
+        - id
+        - image_url
+        - predicted_label
+        - confidence_score
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 33333333-3333-3333-3333-333333333333
+        image_url:
+          type: string
+          format: uri
+          example: https://storage.cassavacare.id/uploads/2026/10/leaf_sample_01.jpg
+        predicted_label:
+          type: string
+          example: Cassava Mosaic Disease (CMD)
+        confidence_score:
+          type: number
+          format: float
+          example: 0.9425
+          description: Skor kepastian AI dari 0.0000 hingga 1.0000.
+        status:
+          $ref: '#/components/schemas/PredictionStatus'
+        disease_info:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DiseaseResponse'
+        fallback_warning:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/FallbackWarning'
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-10-03T23:00:00Z'
+
+    PredictionResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Diagnosa AI berhasil diproses
+        data:
+          $ref: '#/components/schemas/PredictionDetailData'
+
+    ListPredictionResponse:
+      type: object
+      required:
+        - success
+        - message
+        - data
+        - pagination
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Riwayat diagnosa berhasil diambil
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PredictionDetailData'
+        pagination:
+          type: object
+          required:
+            - page
+            - limit
+            - total_items
+            - total_pages
+          properties:
+            page:
+              type: integer
+              example: 1
+            limit:
+              type: integer
+              example: 10
+            total_items:
+              type: integer
+              example: 45
+            total_pages:
+              type: integer
+              example: 5
+
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+          example: email
+        message:
+          type: string
+          example: Format email tidak valid
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - message
+        - error_code
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Permintaan tidak dapat diproses
+        error_code:
+          type: string
+          example: INVALID_INPUT
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
