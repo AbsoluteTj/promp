@@ -4,13 +4,13 @@
 **Modul:** PTM-05 — Desain REST API & Pemodelan Database  
 **Proyek:** CassavaCare AI Backend API  
 **Versi:** 1.0.0  
-**Tanggal:** 2026-10-04  
+**Tanggal:** 04-10-2026  
 
 ---
 
 ## 1. Pendahuluan & Ringkasan Eksekutif
 
-Dokumen ini mendefinisikan pemodelan data relasional (Database Schema) dan Entity Relationship Diagram (ERD) untuk sistem **CassavaCare AI Backend API**. Pemodelan data ini dirancang berdasarkan kebutuhan fungsional pada **SRS (Software Requirements Specification)**, **PRD (Product Requirements Document)**, serta antarmuka yang didefinisikan pada **`api-contract.md`**.
+Dokumen ini mendefinisikan pemodelan data relasional (Database Schema) dan Entity Relationship Diagram (ERD) untuk sistem **CassavaCare AI Backend API**. Pemodelan data ini dirancang berdasarkan kebutuhan fungsional pada **SRS (Software Requirements Specification)**, **PRD (Product Requirements Document)**, serta antarmuka yang didefinisikan pada **`api-contract.md`**. 
 
 ### 1.1 Prinsip Desain Basis Data
 1. **Aturan Normalisasi (3NF):** Seluruh tabel memenuhi Third Normal Form (3NF) untuk mencegah redundansi data dan anomali pembaruan (update anomalies).
