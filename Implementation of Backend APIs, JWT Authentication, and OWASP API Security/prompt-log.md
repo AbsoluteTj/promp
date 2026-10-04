@@ -1,7 +1,7 @@
 # LOG PROMPT & DOKUMENTASI ITERASI AI (PTM-06)
 **Mata Kuliah:** Pengembangan Aplikasi Mobile & Web Berbasis AI (IMWAD)  
 **Topik:** Implementasi Backend API, Autentikasi JWT, & Keamanan OWASP API Security  
-**Proyek:** CassavaCare AI  
+**Proyek:** CassavaCare AI
 **Tanggal:** Oktober 2026  
 **Versi:** 1.0.0  
 
